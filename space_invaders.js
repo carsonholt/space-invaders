@@ -40,6 +40,8 @@ var score = 0;
 var level = 1;
 var player = new Player(WIDTH/2, HEIGHT-80);
 var playerImg;
+var movingLeft = false;
+
 /** @function handleKeydown
   * Event handler for keydown events
   * @param {KeyEvent} event - the keydown event
@@ -114,7 +116,7 @@ function update(elapsedTime) {
   if(currentInput.space && !priorInput.space) {
     // TODO: Fire bullet
 	console.log("x: " + x + "y: " + y);
-    bullets.push(new Bullet(player.x+20, player.y, 2));
+    bullets.push(new Bullet(1, player.x+20, player.y, 2));
   }
   if(currentInput.left) {
     player.x -= 0.1 * elapsedTime;
@@ -122,11 +124,57 @@ function update(elapsedTime) {
   if(currentInput.right) {
     player.x += 0.1 * elapsedTime;
   }
-  bullets.forEach(function(bullet, index){
-    bullet.update(elapsedTime);
-    // check to see if bullet is off-screen
-    if(bullet.y < bullet.r) bullets.splice(index, 1);
-  });
+  
+	aliens.forEach(function(alien){
+		alien.update(elapsedTime);				
+		//generate alien fire
+		  var rand = Math.random();
+		  //console.log(rand);
+		  if (rand > 0.999) {
+			  console.log('enemy fire');
+			  enemyFire.push(new Bullet(2, alien.x + (alien.width / 2), alien.y, 2));
+		  }
+		  if (detectCollision(alien,player)) {
+			 setTimeout(function() {console.log('life lost')}, 2000);
+		 }
+		  if (alien.x < 1 || alien.x >= WIDTH-30) {
+			  alien.drop(ctx);
+			  movingLeft = 1 - movingLeft;
+		  }
+	});
+	
+	bullets.forEach(function(bullet, index){
+		bullet.update(elapsedTime);
+		if(bullet.y < bullet.r) bullets.splice(index, 1);
+		aliens.forEach(function(alien){
+			//alien.update(elapsedTime);
+			if (detectCollision(bullet, alien)) {
+				// add score
+				if (alien.type == 1) {
+					score += 10;
+				} else if (alien.type == 2) {
+					score += 20;
+				} else if (alien.type == 3) {
+					score += 30;
+				}			
+				delete bullet.x;
+				delete bullet.y;
+				delete alien.x;
+				delete alien.y;
+			}
+		});
+		
+	});	  
+	enemyFire.forEach(function(bullet, index) {
+	  bullet.update(elapsedTime)
+	  // check to see if bullet hit player
+	  if (detectCollision(bullet, player)) {
+		setTimeout(function() {console.log('life lost')}, 2000);
+		return;
+	  }
+	  // check to see if bullet is off-screen
+	  if(bullet.y >= HEIGHT-50) enemyFire.splice(index, 1);
+	});	
 }
 
 /** @function render
@@ -135,24 +183,67 @@ function update(elapsedTime) {
   * elapsed between frames
   */
 function render(elapsedTime) {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0,0,WIDTH,HEIGHT);
-  player.load('sprites/ship.jpg');
-  player.render(ctx);
-  bullets.forEach(function(bullet){
-    bullet.render(ctx);
-  });
+	ctx.clearRect(0, 0, WIDTH, HEIGHT);
+	ctx.fillStyle = "#000000";
+	ctx.fillRect(0,0,WIDTH,HEIGHT);
+	displayInfo();
+	player.load('sprites/ship.jpg');
+	player.render(ctx);
+  
+    aliens.forEach(function(alien){
+		alien.load();
+		alien.render(ctx); 	
+	});
+	bullets.forEach(function(bullet){
+		bullet.render(ctx);
+	});
+	enemyFire.forEach(function(bullet){
+		bullet.render(ctx);		
+	});
 }
 
 function detectCollision(a, b) {
-	if ((a.x >= b.x && a.x < b.x + b.height) && (a.y >= b.y && a.y < b.y + b.height)) {
+	if ((a.x >= b.x && a.x < b.x + b.width) && (a.y >= b.y && a.y < b.y + b.height)) {
 		console.log('collision detected');
+		console.log(a.constructor.name);
+		console.log(b.constructor.name);
+		if (b.constructor.name == "Player") {
+			life -= 1;
+		}
 		return true;
 	} else {
 		return false;
 	}
 }
+
+function createAliens() {
+	for (var i = 0; i < NUM_COLS; i++) {
+		aliens.push(new Alien(3, 75 + (45*i), 30));
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		aliens.push(new Alien(2, 75 + (45*i), 60));
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		aliens.push(new Alien(1, 75 + (45*i), 90));
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		aliens.push(new Alien(1, 75 + (45*i), 120));
+	}
+}
+
+/**
+  *
+  */
+function displayInfo() {
+	ctx.fillStyle = '#FFFFFF';
+	ctx.font = '16px Times New Roman';
+	ctx.fillText("Lives: " + life, 10, 425);
+	ctx.fillText("Level: " + level, 400, 425);
+	ctx.fillText("Score: " + score, 500, 425);
+	return;
+}
+// Render the aliens for the first time
+createAliens();
 // Start the game loop
 window.requestAnimationFrame(loop);
 
@@ -165,6 +256,8 @@ function Player(x, y) {
 Player.prototype.load = function(pathname) {
 	playerImg = new Image();
 	playerImg.src = 'sprites/ship.jpg';
+	player.width = 40;
+	player.height = 30;
 }
 
 Player.prototype.render = function(context) {
@@ -172,14 +265,19 @@ Player.prototype.render = function(context) {
 }
 
 // Bullet class
-function Bullet(x, y, r) {
+function Bullet(type, x, y, r) {
+	this.type = type;
   this.x = x;
   this.y = y;
   this.r = r;
 }
 
 Bullet.prototype.update = function(deltaT) {
-  this.y -= deltaT * 0.4;
+	if (this.type == 1) {
+		this.y -= deltaT * 0.4;
+	} else {
+		this.y += deltaT * 0.3;
+	}
 }
 
 Bullet.prototype.render = function(context) {
@@ -196,10 +294,13 @@ function Alien(type, x, y) {
 	this.y = y;
 }
 
-var movingLeft = false;
+var alienImg;
 
-Alien.prototype.load = function(deltaT) {
-	
+Alien.prototype.load = function() {
+	alienImg = new Image();
+	alienImg.src = 'sprites/alien' + this.type + '.jpg';
+	this.width = alienImg.width;
+	this.height = alienImg.height;
 }
 
 Alien.prototype.update = function(deltaT) {
@@ -211,5 +312,11 @@ Alien.prototype.update = function(deltaT) {
 }
 
 Alien.prototype.render = function(context) {
-	
+	context.drawImage(alienImg, this.x, this.y);
+}
+
+Alien.prototype.drop = function(context) {
+	 aliens.forEach(function(alien){
+		 alien.y += 20;
+	 });
 }
