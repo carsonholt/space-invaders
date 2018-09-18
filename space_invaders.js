@@ -41,6 +41,9 @@ var level = 1;
 var player = new Player(WIDTH/2, HEIGHT-80);
 var playerImg;
 var movingLeft = false;
+var numFired = 0;
+var flag = false;
+var speed = 0.02;
 
 /** @function handleKeydown
   * Event handler for keydown events
@@ -95,6 +98,11 @@ function loop(timestamp) {
   start = timestamp;
   update(elapsedTime);
   render(elapsedTime);
+  if (life < 1) 
+	{ 
+		gameOver(); 
+		return;
+	}
   copyInput();
   window.requestAnimationFrame(loop);
 }
@@ -117,6 +125,7 @@ function update(elapsedTime) {
     // TODO: Fire bullet
 	console.log("x: " + x + "y: " + y);
     bullets.push(new Bullet(1, player.x+20, player.y, 2));
+	numFired++;
   }
   if(currentInput.left) {
     player.x -= 0.1 * elapsedTime;
@@ -130,12 +139,14 @@ function update(elapsedTime) {
 		//generate alien fire
 		  var rand = Math.random();
 		  //console.log(rand);
-		  if (rand > 0.999) {
+		  if (rand > 0.9996) {
 			  console.log('enemy fire');
-			  enemyFire.push(new Bullet(2, alien.x + (alien.width / 2), alien.y, 2));
+			  enemyFire.push(new Bullet(2, alien.x + (alien.width / 2), alien.y + alien.height, 2));
 		  }
 		  if (detectCollision(alien,player)) {
-			 setTimeout(function() {console.log('life lost')}, 2000);
+			  life = 0;
+			 gameOver();
+			 return;
 		 }
 		  if (alien.x < 1 || alien.x >= WIDTH-30) {
 			  alien.drop(ctx);
@@ -156,9 +167,9 @@ function update(elapsedTime) {
 					score += 20;
 				} else if (alien.type == 3) {
 					score += 30;
-				}			
-				delete bullet.x;
-				delete bullet.y;
+				}
+				numAliens--;
+				bullets.splice(index, 1);
 				delete alien.x;
 				delete alien.y;
 			}
@@ -166,15 +177,22 @@ function update(elapsedTime) {
 		
 	});	  
 	enemyFire.forEach(function(bullet, index) {
-	  bullet.update(elapsedTime)
-	  // check to see if bullet hit player
-	  if (detectCollision(bullet, player)) {
-		setTimeout(function() {console.log('life lost')}, 2000);
-		return;
-	  }
+	  bullet.update(elapsedTime);	  
 	  // check to see if bullet is off-screen
 	  if(bullet.y >= HEIGHT-50) enemyFire.splice(index, 1);
+	  // check to see if bullet hit player
+	  if (detectCollision(bullet, player)) {		  
+		  enemyFire.splice(index, 1);
+		  life--;
+		  player.x = WIDTH/2;
+		  player.y = HEIGHT - 80;
+		  return false;
+	  }
 	});	
+	if (numAliens < 1) {
+		//setTimeout(advanceLevel, 2000);
+		advanceLevel();
+	}
 }
 
 /** @function render
@@ -186,9 +204,15 @@ function render(elapsedTime) {
 	ctx.clearRect(0, 0, WIDTH, HEIGHT);
 	ctx.fillStyle = "#000000";
 	ctx.fillRect(0,0,WIDTH,HEIGHT);
-	displayInfo();
+	//draw line
+	ctx.fillStyle = "#FFFFFF";
+	ctx.beginPath();
+	ctx.moveTo(0,HEIGHT-50);
+	ctx.lineTo(WIDTH,HEIGHT-50);
+	ctx.stroke();
 	player.load('sprites/ship.jpg');
 	player.render(ctx);
+	displayInfo(ctx);
   
     aliens.forEach(function(alien){
 		alien.load();
@@ -202,14 +226,15 @@ function render(elapsedTime) {
 	});
 }
 
+/** @function detectCollision
+  * takes two objects and checks for overlap
+  * @param a and b - two objects
+  */
 function detectCollision(a, b) {
 	if ((a.x >= b.x && a.x < b.x + b.width) && (a.y >= b.y && a.y < b.y + b.height)) {
 		console.log('collision detected');
 		console.log(a.constructor.name);
 		console.log(b.constructor.name);
-		if (b.constructor.name == "Player") {
-			life -= 1;
-		}
 		return true;
 	} else {
 		return false;
@@ -231,13 +256,85 @@ function createAliens() {
 	}
 }
 
-/**
-  *
+/** function advanceLevel
+  * resets the player and aliens, increases speed by 10%
   */
-function displayInfo() {
+function advanceLevel() {
+	// calculate bonus
+	bonus = calculateBonus();
+		
+	/*ctx.fillStyle = '#FFFFFF';
+	ctx.font = '20px Times New Roman';
+	ctx.textAlign="center";
+	ctx.fillText("Level " + level + " complete", WIDTH/2,150);
+	ctx.textAlign="center";
+	ctx.fillText("Score: " + score, WIDTH/2,175);
+	ctx.textAlign="center";
+	ctx.fillText("Bonus: " + bonus, WIDTH/2,200);*/
+
+	level++;
+	numFired = 0;
+	speed *= 1.1;
+	
+	for (var i = 0; i < NUM_COLS; i++) {
+		//aliens.push(new Alien(3, 75 + (45*i), 30));
+		aliens[i].x = 75 + (45*i);
+		aliens[i].y = 30;
+		numAliens++;
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		//aliens.push(new Alien(2, 75 + (45*i), 60));
+		aliens[numAliens].x = 75 + (45*i);
+		aliens[numAliens].y = 60;
+		numAliens++;
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		//aliens.push(new Alien(1, 75 + (45*i), 90));
+		aliens[numAliens].x = 75 + (45*i);
+		aliens[numAliens].y = 90;
+		numAliens++;
+	}
+	for (var i = 0; i < NUM_COLS; i++) {
+		//aliens.push(new Alien(1, 75 + (45*i), 120));
+		aliens[numAliens].x = 75 + (45*i);
+		aliens[numAliens].y = 120;
+		numAliens++;
+	}
+	return;
+}
+
+/** calculateBonus
+  * calculates the accuracy bonus after each level 
+  * (from 0 to 100 pts, based on # shots fired)
+  * return bonus
+  */
+function calculateBonus() {
+	var bonus = Math.round(((NUM_ROWS * NUM_COLS) / numFired) * 100);
+	score += bonus;
+	return bonus;
+}
+
+/** gameOver
+  * draws red 'Game Over' text, deletes aliens and player
+  */
+function gameOver() {
+	ctx.fillStyle = 'red';
+	ctx.font = '24px Times New Roman';
+	ctx.alignText="center";
+	ctx.fillText("Game Over", WIDTH/2, HEIGHT/2);
+}
+
+/** displayInfo
+  *	draws each life, displays current level, displays score
+  * param context - the context being drawn on
+  */
+function displayInfo(context) {
 	ctx.fillStyle = '#FFFFFF';
 	ctx.font = '16px Times New Roman';
-	ctx.fillText("Lives: " + life, 10, 425);
+	ctx.fillText("Lives: ", 10, 425);
+	for (var i = 0; i < life; i++) {
+		context.drawImage(playerImg, 60 + (i*30), 417, 20, 15);
+	}
 	ctx.fillText("Level: " + level, 400, 425);
 	ctx.fillText("Score: " + score, 500, 425);
 	return;
@@ -305,9 +402,9 @@ Alien.prototype.load = function() {
 
 Alien.prototype.update = function(deltaT) {
 	if (movingLeft) {
-		this.x -= deltaT * 0.02;
+		this.x -= deltaT * speed;
 	} else {
-		this.x += deltaT * 0.02;
+		this.x += deltaT * speed;
 	}
 }
 
