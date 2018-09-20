@@ -1,0 +1,1 @@
+NOTE: Use sprites inside sprite folder, not in the main folder
